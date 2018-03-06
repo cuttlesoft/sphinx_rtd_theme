@@ -29,7 +29,7 @@
     "wyrm": "~1.0.x"
   },
   "dependencies": {
-    "lato-googlefont": "*",
+    "roboto-googlefont": "*",
     "robotoslab-googlefont": "*",
     "inconsolata-googlefont": "*",
     "font-awesome": "~4.7",
