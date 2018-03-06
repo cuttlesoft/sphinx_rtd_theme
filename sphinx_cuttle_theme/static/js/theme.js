@@ -1,4 +1,4 @@
-require=(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({"sphinx-rtd-theme":[function(require,module,exports){
+require=(function(){function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s}return e})()({"sphinx-rtd-theme":[function(require,module,exports){
 var jQuery = (typeof(window) != 'undefined') ? window.jQuery : require('jquery');
 
 // Sphinx theme nav state
@@ -16,33 +16,48 @@ function ThemeNav () {
         isRunning: false
     };
 
-    nav.enable = function () {
+    nav.enable = function (withStickyNav) {
         var self = this;
 
-        if (!self.isRunning) {
-            self.isRunning = true;
-            jQuery(function ($) {
-                self.init($);
+        if (self.isRunning) {
+            // Only allow enabling nav logic once
+            return;
+        }
 
-                self.reset();
-                self.win.on('hashchange', self.reset);
+        self.isRunning = true;
+        jQuery(function ($) {
+            self.init($);
 
+            self.reset();
+            self.win.on('hashchange', self.reset);
+
+            if (withStickyNav) {
                 // Set scroll monitor
                 self.win.on('scroll', function () {
                     if (!self.linkScroll) {
-                        self.winScroll = true;
+                        if (!self.winScroll) {
+                            self.winScroll = true;
+                            requestAnimationFrame(function() { self.onScroll(); });
+                        }
                     }
                 });
-                setInterval(function () { if (self.winScroll) self.onScroll(); }, 25);
+            }
 
-                // Set resize monitor
-                self.win.on('resize', function () {
+            // Set resize monitor
+            self.win.on('resize', function () {
+                if (!self.winResize) {
                     self.winResize = true;
-                });
-                setInterval(function () { if (self.winResize) self.onResize(); }, 25);
-                self.onResize();
+                    requestAnimationFrame(function() { self.onResize(); });
+                }
             });
-        };
+
+            self.onResize();
+        });
+
+    };
+
+    nav.enableSticky = function() {
+        this.enable(true);
     };
 
     nav.init = function ($) {
@@ -75,8 +90,15 @@ function ThemeNav () {
             })
 
         // Make tables responsive
-        $("table.docutils:not(.field-list)")
+        $("table.docutils:not(.field-list,.footnote,.citation)")
             .wrap("<div class='wy-table-responsive'></div>");
+
+        // Add extra class to responsive tables that contain
+        // footnotes or citations so that we can target them for styling
+        $("table.docutils.footnote")
+            .wrap("<div class='wy-table-responsive footnote'></div>");
+        $("table.docutils.citation")
+            .wrap("<div class='wy-table-responsive citation'></div>");
 
         // Add expand links to all parents of nested ul
         $('.wy-menu-vertical ul').not('.simple').siblings('a').each(function () {
@@ -93,21 +115,40 @@ function ThemeNav () {
 
     nav.reset = function () {
         // Get anchor from URL and open up nested nav
-        var anchor = encodeURI(window.location.hash);
-        if (anchor) {
-            try {
-                var link = $('.wy-menu-vertical')
-                    .find('[href="' + anchor + '"]');
-                $('.wy-menu-vertical li.toctree-l1 li.current')
-                    .removeClass('current');
+        var anchor = encodeURI(window.location.hash) || '#';
+
+        try {
+            var link = $('.wy-menu-vertical')
+                .find('[href="' + anchor + '"]');
+            // If we didn't find a link, it may be because we clicked on
+            // something that is not in the sidebar (eg: when using
+            // sphinxcontrib.httpdomain it generates headerlinks but those
+            // aren't picked up and placed in the toctree). So let's find
+            // the closest header in the document and try with that one.
+            if (link.length === 0) {
+              var doc_link = $('.document a[href="' + anchor + '"]');
+              var closest_section = doc_link.closest('div.section');
+              // Try again with the closest section entry.
+              link = $('.wy-menu-vertical')
+                .find('[href="#' + closest_section.attr("id") + '"]');
+            }
+            // If we found a matching link then reset current and re-apply
+            // otherwise retain the existing match
+            if (link.length > 0) {
+                $('.wy-menu-vertical .current').removeClass('current');
+                link.addClass('current');
+                link.closest('li.toctree-l1').addClass('current');
+                link.closest('li.toctree-l1').parent().addClass('current');
+                link.closest('li.toctree-l1').addClass('current');
                 link.closest('li.toctree-l2').addClass('current');
                 link.closest('li.toctree-l3').addClass('current');
                 link.closest('li.toctree-l4').addClass('current');
             }
-            catch (err) {
-                console.log("Error expanding nav for anchor", err);
-            }
         }
+        catch (err) {
+            console.log("Error expanding nav for anchor", err);
+        }
+
     };
 
     nav.onScroll = function () {
@@ -150,7 +191,37 @@ function ThemeNav () {
 module.exports.ThemeNav = ThemeNav();
 
 if (typeof(window) != 'undefined') {
-    window.SphinxRtdTheme = { StickyNav: module.exports.ThemeNav };
+    window.SphinxRtdTheme = { Navigation: module.exports.ThemeNav };
 }
+
+
+// requestAnimationFrame polyfill by Erik Möller. fixes from Paul Irish and Tino Zijdel
+// https://gist.github.com/paulirish/1579671
+// MIT license
+
+(function() {
+    var lastTime = 0;
+    var vendors = ['ms', 'moz', 'webkit', 'o'];
+    for(var x = 0; x < vendors.length && !window.requestAnimationFrame; ++x) {
+        window.requestAnimationFrame = window[vendors[x]+'RequestAnimationFrame'];
+        window.cancelAnimationFrame = window[vendors[x]+'CancelAnimationFrame']
+                                   || window[vendors[x]+'CancelRequestAnimationFrame'];
+    }
+
+    if (!window.requestAnimationFrame)
+        window.requestAnimationFrame = function(callback, element) {
+            var currTime = new Date().getTime();
+            var timeToCall = Math.max(0, 16 - (currTime - lastTime));
+            var id = window.setTimeout(function() { callback(currTime + timeToCall); },
+              timeToCall);
+            lastTime = currTime + timeToCall;
+            return id;
+        };
+
+    if (!window.cancelAnimationFrame)
+        window.cancelAnimationFrame = function(id) {
+            clearTimeout(id);
+        };
+}());
 
 },{"jquery":"jquery"}]},{},["sphinx-rtd-theme"]);
